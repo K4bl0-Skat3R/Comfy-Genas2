@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Cpu, Copy, Check, Zap, Layers, AlertTriangle, Download, ExternalLink, Box, GitBranch, AlertCircle, FolderOpen, Terminal, PlayCircle, Package, RefreshCw, FileCode } from 'lucide-react';
+import { Cpu, Copy, Check, Zap, Layers, AlertTriangle, Download, ExternalLink, Box, GitBranch, AlertCircle, FolderOpen, Terminal, PlayCircle, Package, RefreshCw, FileCode, CheckCircle, Save } from 'lucide-react';
 import { COMFY_WORKFLOWS } from '../data';
 import { motion } from 'framer-motion';
 
 export const LocalDevView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'setup' | 'workflows'>('setup');
+  const [activeTab, setActiveTab] = useState<'status' | 'workflows'>('status');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const copyToClipboard = (text: string, id: string) => {
@@ -13,45 +13,37 @@ export const LocalDevView: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const CodeBlock = ({ id, code, label }: { id: string, code: string, label: string }) => (
-    <div className="bg-black/50 rounded-lg border border-white/10 overflow-hidden font-mono text-xs my-3 group">
-      <div className="flex justify-between items-center px-4 py-2 bg-white/5 border-b border-white/5">
-        <span className="text-gray-400 font-bold">{label}</span>
-        <button 
-          onClick={() => copyToClipboard(code, id)}
-          className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded"
-          title="Copiar código"
-        >
-          {copiedId === id ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-        </button>
-      </div>
-      <div className="p-4 text-green-400 overflow-x-auto whitespace-pre font-mono text-[11px] leading-relaxed select-all">
-        {code}
-      </div>
-    </div>
-  );
+  const downloadScript = `$dest = "C:\\Users\\Genas-AI\\Documents\\COMFyUI\\ComfyUI_windows_portable\\ComfyUI\\models\\liveportrait"
+New-Item -ItemType Directory -Force -Path $dest
+Write-Host "Baixando modelos para: $dest" -ForegroundColor Cyan
 
-  const batchContent = `@echo off
-echo --- INICIANDO COMFYUI COM PYTHON 3.12 (SYSTEM) ---
-echo Se der erro de falta de libs, instale via pip no Python 3.12
-echo ---------------------------------------------------
-py -3.12 ComfyUI\\main.py --windows-standalone-build
-pause`;
+$files = @(
+    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/appearance_feature_extractor.safetensors",
+    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/motion_extractor.safetensors",
+    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/spade_generator.safetensors",
+    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/warping_module.safetensors"
+)
 
-  const installCommand = `py -3.12 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-py -3.12 -m pip install safetensors aiohttp pyyaml pillow scipy tqdm psutil mediapipe numpy opencv-python gitpython requests`;
+foreach ($url in $files) {
+    $filename = [System.IO.Path]::GetFileName($url)
+    $output = Join-Path $dest $filename
+    Write-Host "Baixando $filename..." -NoNewline
+    Invoke-WebRequest -Uri $url -OutFile $output
+    Write-Host " OK" -ForegroundColor Green
+}
+Write-Host "Downloads concluídos! Reinicie o ComfyUI." -ForegroundColor Yellow`;
 
   return (
     <div className="space-y-6 pb-20">
       {/* Header Hardware Spec */}
-      <div className="bg-dark-800 border-l-4 border-neon-blue p-6 rounded-r-xl">
+      <div className="bg-dark-800 border-l-4 border-red-500 p-6 rounded-r-xl">
         <div className="flex items-center gap-4 mb-4">
-          <div className="p-3 bg-neon-blue/10 rounded-lg text-neon-blue">
-            <Cpu size={32} />
+          <div className="p-3 bg-red-500/10 rounded-lg text-red-500 animate-pulse">
+            <Download size={32} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Setup: RTX 4070 Ti Super + ComfyUI</h2>
-            <p className="text-gray-400 font-mono text-sm">VRAM: 16GB | RAM: 64GB | Path: ...\ComfyUI_windows_portable</p>
+            <h2 className="text-2xl font-bold text-white">Arquivos de Modelo Ausentes</h2>
+            <p className="text-gray-400 font-mono text-sm">Erro: <span className="text-red-400">FileNotFoundError (safetensors)</span></p>
           </div>
         </div>
       </div>
@@ -59,13 +51,13 @@ py -3.12 -m pip install safetensors aiohttp pyyaml pillow scipy tqdm psutil medi
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10">
         <button 
-          onClick={() => setActiveTab('setup')}
+          onClick={() => setActiveTab('status')}
           className={`px-6 py-3 font-medium text-sm transition-colors relative ${
-            activeTab === 'setup' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
+            activeTab === 'status' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
-          Diagnóstico & Fix
-          {activeTab === 'setup' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-neon-blue"></div>}
+          Correção de Modelos
+          {activeTab === 'status' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-500"></div>}
         </button>
         <button 
           onClick={() => setActiveTab('workflows')}
@@ -73,68 +65,80 @@ py -3.12 -m pip install safetensors aiohttp pyyaml pillow scipy tqdm psutil medi
             activeTab === 'workflows' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
-          Workflow Library (.json)
+          Workflow Library
           {activeTab === 'workflows' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-neon-purple"></div>}
         </button>
       </div>
 
       {/* Content */}
       <div className="pt-4">
-        {activeTab === 'setup' ? (
+        {activeTab === 'status' ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            {/* INSTALL DEPENDENCIES GUIDE */}
-            <div className="bg-gradient-to-br from-red-900/20 to-orange-900/20 border border-red-500/30 p-6 rounded-2xl relative overflow-hidden">
-               
-               <div className="flex items-center gap-3 mb-6">
-                 <div className="p-3 bg-red-500/10 rounded-full text-red-500">
-                   <Package size={24} />
-                 </div>
-                 <div>
-                   <h3 className="text-xl font-bold text-white">Etapa Final: Instalar Bibliotecas</h3>
-                   <p className="text-sm text-gray-300">
-                     O erro <code>ModuleNotFoundError: safetensors</code> confirma que o Python 3.12 está "vazio".<br/>
-                     Precisamos instalar o <strong>Torch (Cuda)</strong> e o <strong>Core do ComfyUI</strong> nele.
-                   </p>
-                 </div>
-               </div>
-               
-               <div className="space-y-6">
-                  {/* STEP 1 */}
-                  <div className="bg-black/30 p-4 rounded-xl border border-white/5">
-                    <h4 className="text-white font-bold text-sm mb-2 flex items-center gap-2">
-                       <Terminal size={16} className="text-neon-blue"/> Comando de Instalação Mestre
-                    </h4>
-                    <p className="text-xs text-gray-400 mb-3">
-                       Copie e cole este bloco inteiro no seu Terminal (PowerShell) e dê Enter. Vai baixar cerca de 2GB a 3GB (PyTorch).
-                    </p>
-                    <CodeBlock 
-                      id="install-command"
-                      label="PowerShell Command"
-                      code={installCommand}
-                    />
-                  </div>
+            <div className="bg-red-900/10 border border-red-500/20 p-6 rounded-2xl">
+               <h3 className="text-xl font-bold text-white mb-2">O que aconteceu?</h3>
+               <p className="text-gray-300 mb-4">
+                 O ComfyUI tentou carregar o arquivo <code className="text-red-300 bg-red-900/30 px-1 rounded">appearance_feature_extractor.safetensors</code> e não encontrou.
+                 Isso é normal em instalações manuais. O LivePortrait precisa de <strong>4 arquivos principais</strong> (total ~600MB) na pasta <code className="text-gray-400">models/liveportrait</code>.
+               </p>
+            </div>
 
-                  {/* STEP 2 */}
-                  <div className="flex items-start gap-3 p-4 bg-green-900/10 border border-green-500/20 rounded-xl">
-                     <PlayCircle className="text-green-500 shrink-0 mt-1" size={20} />
-                     <div>
-                        <h4 className="text-green-400 font-bold text-sm">Após a instalação terminar:</h4>
-                        <p className="text-xs text-gray-400 mt-1">
-                           Rode novamente o arquivo <strong>run_system_python.bat</strong> que você criou. O ComfyUI deve abrir normalmente.
-                        </p>
-                     </div>
-                  </div>
+            <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Terminal size={18} className="text-neon-blue" />
+                  Script de Download Automático
+                </h3>
+                <button
+                  onClick={() => copyToClipboard(downloadScript, 'dl-script')}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neon-blue/10 text-neon-blue hover:bg-neon-blue/20 transition-colors text-sm font-medium"
+                >
+                  {copiedId === 'dl-script' ? <Check size={16} /> : <Copy size={16} />}
+                  {copiedId === 'dl-script' ? 'Copiado!' : 'Copiar Script PowerShell'}
+                </button>
+              </div>
+
+              <div className="bg-black/50 p-4 rounded-xl border border-white/5 font-mono text-xs text-gray-300 overflow-x-auto relative">
+                <pre>{downloadScript}</pre>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2 text-sm text-gray-400">
+                <AlertCircle size={14} />
+                <span>Cole este código no seu terminal PowerShell e pressione Enter. Ele vai baixar e salvar tudo na pasta certa.</span>
+              </div>
+            </div>
+
+            <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
+               <h3 className="text-lg font-bold text-white mb-4">Ou baixe manualmente:</h3>
+               <p className="text-sm text-gray-400 mb-4">Salve estes 4 arquivos em: <code className="text-white">ComfyUI/models/liveportrait/</code></p>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/appearance_feature_extractor.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
+                    <span>1. appearance_feature_extractor.safetensors</span>
+                    <Download size={16} />
+                  </a>
+                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/motion_extractor.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
+                    <span>2. motion_extractor.safetensors</span>
+                    <Download size={16} />
+                  </a>
+                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/spade_generator.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
+                    <span>3. spade_generator.safetensors</span>
+                    <Download size={16} />
+                  </a>
+                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/warping_module.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
+                    <span>4. warping_module.safetensors</span>
+                    <Download size={16} />
+                  </a>
                </div>
             </div>
 
           </motion.div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+             {/* Workflow Library Content (Same as before) */}
              <div className="bg-blue-900/20 border border-blue-500/20 p-6 rounded-2xl mb-6">
                 <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><GitBranch className="text-blue-400"/> Hub de Workflows (.json)</h3>
                 <p className="text-sm text-gray-300">
-                  Abaixo estão os fluxos de trabalho exatos que você mencionou. Baixe o JSON da fonte e arraste para o ComfyUI. O Comfy Manager deve detectar nodes faltantes.
+                  Estes são os workflows de elite. Baixe o JSON e arraste para o ComfyUI.
                 </p>
              </div>
 
