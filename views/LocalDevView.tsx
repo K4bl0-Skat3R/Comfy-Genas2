@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cpu, Copy, Check, Zap, Layers, AlertTriangle, Download, ExternalLink, Box, GitBranch, AlertCircle, FolderOpen } from 'lucide-react';
+import { Cpu, Copy, Check, Zap, Layers, AlertTriangle, Download, ExternalLink, Box, GitBranch, AlertCircle, FolderOpen, Terminal, PlayCircle, Package } from 'lucide-react';
 import { COMFY_WORKFLOWS } from '../data';
 import { motion } from 'framer-motion';
 
@@ -40,7 +40,7 @@ export const LocalDevView: React.FC = () => {
           </div>
           <div>
             <h2 className="text-2xl font-bold text-white">Setup: RTX 4070 Ti Super + ComfyUI</h2>
-            <p className="text-gray-400 font-mono text-sm">VRAM: 16GB | RAM: 64GB | Env: Python + Torch (Native)</p>
+            <p className="text-gray-400 font-mono text-sm">VRAM: 16GB | RAM: 64GB | Path: ...\ComfyUI_windows_portable</p>
           </div>
         </div>
       </div>
@@ -53,7 +53,7 @@ export const LocalDevView: React.FC = () => {
             activeTab === 'setup' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
-          Ambiente & Fixes
+          Diagnóstico & Fix
           {activeTab === 'setup' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-neon-blue"></div>}
         </button>
         <button 
@@ -72,102 +72,64 @@ export const LocalDevView: React.FC = () => {
         {activeTab === 'setup' ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            {/* TROUBLESHOOTING SECTION - CRITICAL FIX */}
-            <div className="bg-red-900/10 border border-red-500/50 p-6 rounded-2xl animate-pulse-slow relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-4 opacity-10">
-                 <AlertCircle size={100} className="text-red-500" />
+            <div className="bg-green-900/10 border border-green-500/20 p-4 rounded-xl flex items-center gap-3">
+               <div className="p-2 bg-green-500/20 rounded-full text-green-500">
+                 <Check size={20} />
                </div>
-               <h3 className="text-xl font-bold text-red-400 flex items-center gap-2 mb-4 relative z-10">
+               <div>
+                 <h4 className="font-bold text-white">Landmark Model Carregado!</h4>
+                 <p className="text-xs text-gray-400">O erro anterior foi corrigido (warmup time: 0.040s). O modelo está funcional.</p>
+               </div>
+            </div>
+
+            {/* MISSING DEPENDENCY - MEDIAPIPE */}
+            <div className="bg-orange-900/10 border border-orange-500/50 p-6 rounded-2xl animate-pulse-slow relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-4 opacity-10">
+                 <Package size={100} className="text-orange-500" />
+               </div>
+               <h3 className="text-xl font-bold text-orange-400 flex items-center gap-2 mb-4 relative z-10">
                  <AlertTriangle size={24} /> 
-                 Correção Crítica: landmark.onnx
+                 Falta Instalar: MediaPipe
                </h3>
                
-               <p className="text-gray-300 text-sm mb-4 relative z-10">
-                 O erro <code>NO_SUCHFILE: landmark.onnx</code> acontece porque o download automático falhou. Você precisa baixar esse arquivo manualmente e colocar na pasta correta.
+               <p className="text-gray-300 text-sm mb-4 relative z-10 leading-relaxed">
+                 O erro <code>ModuleNotFoundError: No module named 'mediapipe'</code> indica que esta biblioteca específica (usada para detectar o rosto) não foi instalada automaticamente. Vamos instalá-la manualmente.
                </p>
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-                  <div className="bg-black/40 p-4 rounded-xl border border-red-500/20">
-                     <h4 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-                       <Download size={16} /> Passo 1: Download
-                     </h4>
-                     <p className="text-xs text-gray-400 mb-3">Baixe o arquivo oficial (pesa aprox. 2MB).</p>
-                     <a 
-                       href="https://github.com/kijai/ComfyUI-LivePortraitKJ/releases/download/v1.0/landmark.onnx" 
-                       target="_blank" 
-                       rel="noreferrer"
-                       className="block w-full text-center py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-colors"
-                     >
-                       Baixar landmark.onnx
-                     </a>
-                  </div>
-
-                  <div className="bg-black/40 p-4 rounded-xl border border-red-500/20">
-                     <h4 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-                       <FolderOpen size={16} /> Passo 2: Onde Colocar
-                     </h4>
-                     <p className="text-xs text-gray-400 mb-2">Copie o arquivo para esta pasta exata:</p>
-                     <div className="font-mono text-xs text-yellow-400 break-all bg-black p-2 rounded border border-white/10">
-                       ComfyUI\models\liveportrait\landmark.onnx
-                     </div>
-                  </div>
+               <div className="bg-black/40 p-4 rounded-xl border border-orange-500/20 relative z-10">
+                  <h4 className="text-sm font-bold text-white mb-2">Comando de Correção (PowerShell)</h4>
+                  <p className="text-xs text-gray-400 mb-2">
+                    Execute este comando na raiz da sua pasta ComfyUI (onde está o run_nvidia_gpu.bat).
+                  </p>
+                  <CodeBlock 
+                    id="pip-mediapipe"
+                    label="Instalar MediaPipe"
+                    code={`C:\\Users\\Genas-AI\\Documents\\COMFyUI\\ComfyUI_windows_portable\\python_embeded\\python.exe -m pip install mediapipe`}
+                  />
                </div>
             </div>
 
-            <div className="bg-gradient-to-r from-neon-purple/10 to-blue-500/10 border border-neon-purple/20 p-6 rounded-2xl">
+            {/* VERIFICATION */}
+            <div className="bg-gradient-to-r from-blue-900/10 to-purple-900/10 border border-white/10 p-6 rounded-2xl">
               <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
-                <Layers size={24} className="text-neon-purple" /> O Caminho "ComfyUI Native"
+                <PlayCircle size={24} className="text-neon-blue" /> Próximo Passo
               </h3>
-              <p className="text-gray-300 text-sm mb-4">
-                Como você já tem o ambiente configurado, <strong>não use Docker</strong>. É uma camada extra desnecessária que complica o acesso aos seus modelos locais. A integração nativa no ComfyUI é superior porque permite encadear Face Restoration e Upscale no mesmo fluxo.
-              </p>
-
-              <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl flex gap-3 mb-6">
-                 <AlertTriangle size={20} className="text-yellow-500 shrink-0 mt-0.5" />
-                 <div className="text-sm text-yellow-200/80">
-                   <strong>Atenção ao Python 3.14:</strong> A maioria das wheels de PyTorch/CUDA e bibliotecas como `insightface` (essencial para LivePortrait) ainda são instáveis para 3.14. Recomendo fortemente usar seu ambiente <strong>Python 3.12</strong> ou 3.10.
+              
+              <div className="space-y-4">
+                 <p className="text-sm text-gray-300">
+                   1. Rode o comando acima e espere terminar (deve ser rápido).<br/>
+                   2. <strong>Feche</strong> a janela preta do ComfyUI se estiver aberta.<br/>
+                   3. Inicie novamente pelo <code>run_nvidia_gpu.bat</code>.
+                 </p>
+                 <div className="p-4 bg-black/40 rounded-lg border border-white/5">
+                   <h4 className="text-xs uppercase font-bold text-gray-500 mb-2">Nota Técnica:</h4>
+                   <p className="text-sm text-gray-400">
+                     Se o erro persistir pedindo <code>protobuf</code>, o pip deve resolver sozinho. Se não, avise aqui!
+                   </p>
                  </div>
               </div>
-
-              <h4 className="font-bold text-white mb-3">Passo a Passo (Custom Node):</h4>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-400 mb-2">1. Instale o Node Wrapper (Kijai):</p>
-                  <CodeBlock 
-                    id="comfy-node"
-                    label="Terminal (Dentro da pasta custom_nodes)"
-                    code={`cd ComfyUI/custom_nodes
-git clone https://github.com/kijai/ComfyUI-LivePortraitKJ
-cd ComfyUI-LivePortraitKJ
-pip install -r requirements.txt`}
-                  />
-                </div>
-                <div>
-                   <p className="text-sm text-gray-400 mb-2">2. Verifique os Pesos (Weights):</p>
-                   <p className="text-xs text-gray-500 italic mb-2">Certifique-se que sua pasta <code>models/liveportrait</code> tem estes arquivos:</p>
-                   <CodeBlock 
-                     id="weights-manual"
-                     label="Estrutura de Pastas Esperada"
-                     code={`ComfyUI/models/liveportrait/
-├── appearance_feature_extractor.safetensors
-├── motion_extractor.safetensors
-├── spade_generator.safetensors
-├── warping_module.safetensors
-└── landmark.onnx  <-- O ARQUIVO QUE FALTAVA`}
-                   />
-                </div>
-              </div>
             </div>
 
-            <div className="bg-dark-900/50 p-6 rounded-xl border border-white/5 mt-8">
-              <h3 className="text-lg font-bold text-white mb-4">Se você INSISTIR no Docker...</h3>
-              <CodeBlock 
-                id="docker-check"
-                label="Teste de Performance Docker"
-                code={`# Verifique se o container vê sua GPU corretamente
-docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi`}
-              />
-            </div>
           </motion.div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
