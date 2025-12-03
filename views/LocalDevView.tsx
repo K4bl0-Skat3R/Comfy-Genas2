@@ -14,36 +14,26 @@ export const LocalDevView: React.FC = () => {
   };
 
   const downloadScript = `$dest = "C:\\Users\\Genas-AI\\Documents\\COMFyUI\\ComfyUI_windows_portable\\ComfyUI\\models\\liveportrait"
-New-Item -ItemType Directory -Force -Path $dest
-Write-Host "Baixando modelos para: $dest" -ForegroundColor Cyan
+$url = "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/stitching_retargeting_module.safetensors"
+$filename = "stitching_retargeting_module.safetensors"
+$output = Join-Path $dest $filename
 
-$files = @(
-    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/appearance_feature_extractor.safetensors",
-    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/motion_extractor.safetensors",
-    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/spade_generator.safetensors",
-    "https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/warping_module.safetensors"
-)
-
-foreach ($url in $files) {
-    $filename = [System.IO.Path]::GetFileName($url)
-    $output = Join-Path $dest $filename
-    Write-Host "Baixando $filename..." -NoNewline
-    Invoke-WebRequest -Uri $url -OutFile $output
-    Write-Host " OK" -ForegroundColor Green
-}
-Write-Host "Downloads concluídos! Reinicie o ComfyUI." -ForegroundColor Yellow`;
+Write-Host "Baixando a peça final: $filename..." -NoNewline
+Invoke-WebRequest -Uri $url -OutFile $output
+Write-Host " SUCESSO!" -ForegroundColor Green
+Write-Host "Agora sim: Reinicie o ComfyUI e gere seu avatar." -ForegroundColor Yellow`;
 
   return (
     <div className="space-y-6 pb-20">
       {/* Header Hardware Spec */}
-      <div className="bg-dark-800 border-l-4 border-red-500 p-6 rounded-r-xl">
+      <div className="bg-dark-800 border-l-4 border-yellow-500 p-6 rounded-r-xl">
         <div className="flex items-center gap-4 mb-4">
-          <div className="p-3 bg-red-500/10 rounded-lg text-red-500 animate-pulse">
+          <div className="p-3 bg-yellow-500/10 rounded-lg text-yellow-500 animate-pulse">
             <Download size={32} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Arquivos de Modelo Ausentes</h2>
-            <p className="text-gray-400 font-mono text-sm">Erro: <span className="text-red-400">FileNotFoundError (safetensors)</span></p>
+            <h2 className="text-2xl font-bold text-white">Falta 1 Arquivo Final (Retargeting)</h2>
+            <p className="text-gray-400 font-mono text-sm">Erro: <span className="text-yellow-400">stitching_retargeting_module.safetensors</span></p>
           </div>
         </div>
       </div>
@@ -56,8 +46,8 @@ Write-Host "Downloads concluídos! Reinicie o ComfyUI." -ForegroundColor Yellow`
             activeTab === 'status' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
-          Correção de Modelos
-          {activeTab === 'status' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-red-500"></div>}
+          Correção Final
+          {activeTab === 'status' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-yellow-500"></div>}
         </button>
         <button 
           onClick={() => setActiveTab('workflows')}
@@ -75,11 +65,11 @@ Write-Host "Downloads concluídos! Reinicie o ComfyUI." -ForegroundColor Yellow`
         {activeTab === 'status' ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            <div className="bg-red-900/10 border border-red-500/20 p-6 rounded-2xl">
-               <h3 className="text-xl font-bold text-white mb-2">O que aconteceu?</h3>
+            <div className="bg-yellow-900/10 border border-yellow-500/20 p-6 rounded-2xl">
+               <h3 className="text-xl font-bold text-white mb-2">Quase lá! (99%)</h3>
                <p className="text-gray-300 mb-4">
-                 O ComfyUI tentou carregar o arquivo <code className="text-red-300 bg-red-900/30 px-1 rounded">appearance_feature_extractor.safetensors</code> e não encontrou.
-                 Isso é normal em instalações manuais. O LivePortrait precisa de <strong>4 arquivos principais</strong> (total ~600MB) na pasta <code className="text-gray-400">models/liveportrait</code>.
+                 O sistema avançou, carregou os 4 arquivos anteriores, mas agora o workflow pediu o módulo de <strong>Stitching (Costura)</strong>.
+                 Esse módulo é usado para colar o rosto animado de volta no fundo sem deixar marcas.
                </p>
             </div>
 
@@ -87,14 +77,14 @@ Write-Host "Downloads concluídos! Reinicie o ComfyUI." -ForegroundColor Yellow`
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Terminal size={18} className="text-neon-blue" />
-                  Script de Download Automático
+                  Script de Download (Último Arquivo)
                 </h3>
                 <button
                   onClick={() => copyToClipboard(downloadScript, 'dl-script')}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neon-blue/10 text-neon-blue hover:bg-neon-blue/20 transition-colors text-sm font-medium"
                 >
                   {copiedId === 'dl-script' ? <Check size={16} /> : <Copy size={16} />}
-                  {copiedId === 'dl-script' ? 'Copiado!' : 'Copiar Script PowerShell'}
+                  {copiedId === 'dl-script' ? 'Copiado!' : 'Copiar Script'}
                 </button>
               </div>
 
@@ -104,29 +94,19 @@ Write-Host "Downloads concluídos! Reinicie o ComfyUI." -ForegroundColor Yellow`
 
               <div className="mt-4 flex items-center gap-2 text-sm text-gray-400">
                 <AlertCircle size={14} />
-                <span>Cole este código no seu terminal PowerShell e pressione Enter. Ele vai baixar e salvar tudo na pasta certa.</span>
+                <span>Cole e rode no PowerShell. É um arquivo pequeno (~140MB).</span>
               </div>
             </div>
 
             <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
                <h3 className="text-lg font-bold text-white mb-4">Ou baixe manualmente:</h3>
-               <p className="text-sm text-gray-400 mb-4">Salve estes 4 arquivos em: <code className="text-white">ComfyUI/models/liveportrait/</code></p>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/appearance_feature_extractor.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
-                    <span>1. appearance_feature_extractor.safetensors</span>
-                    <Download size={16} />
-                  </a>
-                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/motion_extractor.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
-                    <span>2. motion_extractor.safetensors</span>
-                    <Download size={16} />
-                  </a>
-                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/spade_generator.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
-                    <span>3. spade_generator.safetensors</span>
-                    <Download size={16} />
-                  </a>
-                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/warping_module.safetensors" target="_blank" rel="noreferrer" className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300">
-                    <span>4. warping_module.safetensors</span>
-                    <Download size={16} />
+               <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors text-sm text-gray-300 border border-white/5">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-white">stitching_retargeting_module.safetensors</span>
+                    <span className="text-xs text-gray-500">Salvar em: ComfyUI/models/liveportrait/</span>
+                  </div>
+                  <a href="https://huggingface.co/Kijai/LivePortrait_safetensors/resolve/main/stitching_retargeting_module.safetensors" target="_blank" rel="noreferrer" className="p-2 bg-neon-blue/10 text-neon-blue rounded-lg">
+                    <Download size={20} />
                   </a>
                </div>
             </div>
@@ -134,7 +114,7 @@ Write-Host "Downloads concluídos! Reinicie o ComfyUI." -ForegroundColor Yellow`
           </motion.div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-             {/* Workflow Library Content (Same as before) */}
+             {/* Workflow Library Content */}
              <div className="bg-blue-900/20 border border-blue-500/20 p-6 rounded-2xl mb-6">
                 <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><GitBranch className="text-blue-400"/> Hub de Workflows (.json)</h3>
                 <p className="text-sm text-gray-300">
