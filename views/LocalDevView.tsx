@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cpu, Copy, Check, Zap, Layers, AlertTriangle, Download, ExternalLink, Box, GitBranch, AlertCircle, FolderOpen, Terminal, PlayCircle, Package } from 'lucide-react';
+import { Cpu, Copy, Check, Zap, Layers, AlertTriangle, Download, ExternalLink, Box, GitBranch, AlertCircle, FolderOpen, Terminal, PlayCircle, Package, RefreshCw, FileCode } from 'lucide-react';
 import { COMFY_WORKFLOWS } from '../data';
 import { motion } from 'framer-motion';
 
@@ -14,21 +14,32 @@ export const LocalDevView: React.FC = () => {
   };
 
   const CodeBlock = ({ id, code, label }: { id: string, code: string, label: string }) => (
-    <div className="bg-black/50 rounded-lg border border-white/10 overflow-hidden font-mono text-xs my-3">
+    <div className="bg-black/50 rounded-lg border border-white/10 overflow-hidden font-mono text-xs my-3 group">
       <div className="flex justify-between items-center px-4 py-2 bg-white/5 border-b border-white/5">
-        <span className="text-gray-400">{label}</span>
+        <span className="text-gray-400 font-bold">{label}</span>
         <button 
           onClick={() => copyToClipboard(code, id)}
-          className="text-gray-400 hover:text-white transition-colors"
+          className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded"
+          title="Copiar código"
         >
           {copiedId === id ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
         </button>
       </div>
-      <div className="p-4 text-green-400 overflow-x-auto whitespace-pre">
+      <div className="p-4 text-green-400 overflow-x-auto whitespace-pre font-mono text-[11px] leading-relaxed select-all">
         {code}
       </div>
     </div>
   );
+
+  const batchContent = `@echo off
+echo --- INICIANDO COMFYUI COM PYTHON 3.12 (SYSTEM) ---
+echo Se der erro de falta de libs, instale via pip no Python 3.12
+echo ---------------------------------------------------
+py -3.12 ComfyUI\\main.py --windows-standalone-build
+pause`;
+
+  const installCommand = `py -3.12 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+py -3.12 -m pip install safetensors aiohttp pyyaml pillow scipy tqdm psutil mediapipe numpy opencv-python gitpython requests`;
 
   return (
     <div className="space-y-6 pb-20">
@@ -72,62 +83,49 @@ export const LocalDevView: React.FC = () => {
         {activeTab === 'setup' ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            <div className="bg-green-900/10 border border-green-500/20 p-4 rounded-xl flex items-center gap-3">
-               <div className="p-2 bg-green-500/20 rounded-full text-green-500">
-                 <Check size={20} />
-               </div>
-               <div>
-                 <h4 className="font-bold text-white">Landmark Model Carregado!</h4>
-                 <p className="text-xs text-gray-400">O erro anterior foi corrigido (warmup time: 0.040s). O modelo está funcional.</p>
-               </div>
-            </div>
-
-            {/* MISSING DEPENDENCY - MEDIAPIPE */}
-            <div className="bg-orange-900/10 border border-orange-500/50 p-6 rounded-2xl animate-pulse-slow relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-4 opacity-10">
-                 <Package size={100} className="text-orange-500" />
-               </div>
-               <h3 className="text-xl font-bold text-orange-400 flex items-center gap-2 mb-4 relative z-10">
-                 <AlertTriangle size={24} /> 
-                 Falta Instalar: MediaPipe
-               </h3>
+            {/* INSTALL DEPENDENCIES GUIDE */}
+            <div className="bg-gradient-to-br from-red-900/20 to-orange-900/20 border border-red-500/30 p-6 rounded-2xl relative overflow-hidden">
                
-               <p className="text-gray-300 text-sm mb-4 relative z-10 leading-relaxed">
-                 O erro <code>ModuleNotFoundError: No module named 'mediapipe'</code> indica que esta biblioteca específica (usada para detectar o rosto) não foi instalada automaticamente. Vamos instalá-la manualmente.
-               </p>
-
-               <div className="bg-black/40 p-4 rounded-xl border border-orange-500/20 relative z-10">
-                  <h4 className="text-sm font-bold text-white mb-2">Comando de Correção (PowerShell)</h4>
-                  <p className="text-xs text-gray-400 mb-2">
-                    Execute este comando na raiz da sua pasta ComfyUI (onde está o run_nvidia_gpu.bat).
-                  </p>
-                  <CodeBlock 
-                    id="pip-mediapipe"
-                    label="Instalar MediaPipe"
-                    code={`C:\\Users\\Genas-AI\\Documents\\COMFyUI\\ComfyUI_windows_portable\\python_embeded\\python.exe -m pip install mediapipe`}
-                  />
-               </div>
-            </div>
-
-            {/* VERIFICATION */}
-            <div className="bg-gradient-to-r from-blue-900/10 to-purple-900/10 border border-white/10 p-6 rounded-2xl">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
-                <PlayCircle size={24} className="text-neon-blue" /> Próximo Passo
-              </h3>
-              
-              <div className="space-y-4">
-                 <p className="text-sm text-gray-300">
-                   1. Rode o comando acima e espere terminar (deve ser rápido).<br/>
-                   2. <strong>Feche</strong> a janela preta do ComfyUI se estiver aberta.<br/>
-                   3. Inicie novamente pelo <code>run_nvidia_gpu.bat</code>.
-                 </p>
-                 <div className="p-4 bg-black/40 rounded-lg border border-white/5">
-                   <h4 className="text-xs uppercase font-bold text-gray-500 mb-2">Nota Técnica:</h4>
-                   <p className="text-sm text-gray-400">
-                     Se o erro persistir pedindo <code>protobuf</code>, o pip deve resolver sozinho. Se não, avise aqui!
+               <div className="flex items-center gap-3 mb-6">
+                 <div className="p-3 bg-red-500/10 rounded-full text-red-500">
+                   <Package size={24} />
+                 </div>
+                 <div>
+                   <h3 className="text-xl font-bold text-white">Etapa Final: Instalar Bibliotecas</h3>
+                   <p className="text-sm text-gray-300">
+                     O erro <code>ModuleNotFoundError: safetensors</code> confirma que o Python 3.12 está "vazio".<br/>
+                     Precisamos instalar o <strong>Torch (Cuda)</strong> e o <strong>Core do ComfyUI</strong> nele.
                    </p>
                  </div>
-              </div>
+               </div>
+               
+               <div className="space-y-6">
+                  {/* STEP 1 */}
+                  <div className="bg-black/30 p-4 rounded-xl border border-white/5">
+                    <h4 className="text-white font-bold text-sm mb-2 flex items-center gap-2">
+                       <Terminal size={16} className="text-neon-blue"/> Comando de Instalação Mestre
+                    </h4>
+                    <p className="text-xs text-gray-400 mb-3">
+                       Copie e cole este bloco inteiro no seu Terminal (PowerShell) e dê Enter. Vai baixar cerca de 2GB a 3GB (PyTorch).
+                    </p>
+                    <CodeBlock 
+                      id="install-command"
+                      label="PowerShell Command"
+                      code={installCommand}
+                    />
+                  </div>
+
+                  {/* STEP 2 */}
+                  <div className="flex items-start gap-3 p-4 bg-green-900/10 border border-green-500/20 rounded-xl">
+                     <PlayCircle className="text-green-500 shrink-0 mt-1" size={20} />
+                     <div>
+                        <h4 className="text-green-400 font-bold text-sm">Após a instalação terminar:</h4>
+                        <p className="text-xs text-gray-400 mt-1">
+                           Rode novamente o arquivo <strong>run_system_python.bat</strong> que você criou. O ComfyUI deve abrir normalmente.
+                        </p>
+                     </div>
+                  </div>
+               </div>
             </div>
 
           </motion.div>
