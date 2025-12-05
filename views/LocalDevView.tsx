@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, PlayCircle, Package, CheckCircle, Upload, ArrowRight, Download, AlertTriangle, FileVideo } from 'lucide-react';
+import { Copy, Check, Terminal, PlayCircle, Package, CheckCircle, Upload, ArrowRight, Download, AlertTriangle, FileVideo, Code, Bug } from 'lucide-react';
 import { COMFY_WORKFLOWS } from '../data';
 import { motion } from 'framer-motion';
 
@@ -52,8 +52,8 @@ pause`;
             activeTab === 'maintenance' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
-          Manutenção & Fixes
-          {activeTab === 'maintenance' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-yellow-500"></div>}
+          Debug & Manutenção
+          {activeTab === 'maintenance' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500"></div>}
         </button>
       </div>
 
@@ -137,54 +137,75 @@ pause`;
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            {/* FFmpeg FIX */}
-            <div className="bg-red-900/20 border border-red-500 p-6 rounded-2xl animate-pulse">
+            {/* PYTHON BUG FIX CARD */}
+            <div className="bg-orange-900/20 border border-orange-500 p-6 rounded-2xl animate-pulse">
                <div className="flex items-center gap-3 mb-4">
-                  <FileVideo className="text-red-500" size={24} />
-                  <h3 className="text-xl font-bold text-white">Erro Detectado: FFmpeg Missing</h3>
+                  <Bug className="text-orange-500" size={24} />
+                  <h3 className="text-xl font-bold text-white">Erro de Escopo: Variável "sampler" não existe</h3>
                </div>
                <p className="text-gray-300 text-sm mb-4">
-                 O ComfyUI não encontrou o codificador de vídeo. Instale o pacote Python wrapper para corrigir isso instantaneamente.
+                 Exatamente! Você está tentando usar <code>sampler=sampler</code>, mas a variável não foi definida dentro da função. O Python não sabe de onde tirar esse valor.
                </p>
-               <div className="bg-black/50 p-4 rounded-xl border border-red-500/30 flex items-center justify-between">
-                  <code className="text-red-400 font-mono text-sm">
-                    py -3.12 -m pip install imageio-ffmpeg
-                  </code>
-                  <button
-                    onClick={() => copyToClipboard('py -3.12 -m pip install imageio-ffmpeg', 'ffmpeg')}
-                    className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors"
-                  >
-                    {copiedId === 'ffmpeg' ? <Check size={18} /> : <Copy size={18} />}
-                  </button>
+               
+               <div className="bg-black/80 p-4 rounded-xl border border-orange-500/30 font-mono text-xs overflow-x-auto space-y-6">
+                  
+                  {/* STEP 1 */}
+                  <div>
+                    <div className="flex items-center justify-between text-gray-400 mb-2 border-b border-gray-700 pb-2">
+                        <span className="font-bold text-white">PASSO 1: Receber na função (interface.py)</span>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-gray-500 text-[10px]">Altere a definição da função on_generate:</p>
+                        <div className="opacity-50 text-red-400 line-through">def on_generate(prompt, negative, steps, cfg):</div>
+                        <div className="text-green-400 font-bold">def on_generate(prompt, negative, steps, cfg, sampler):</div>
+                    </div>
+                  </div>
+
+                  {/* STEP 2 */}
+                  <div>
+                    <div className="flex items-center justify-between text-gray-400 mb-2 border-b border-gray-700 pb-2">
+                        <span className="font-bold text-white">PASSO 2: Enviar pelo Gradio (ui.py ou main.py)</span>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-gray-500 text-[10px]">Procure onde o botão é clicado (btn.click) e adicione o componente do sampler na lista:</p>
+                        <div className="opacity-50 text-red-400 line-through">inputs=[prompt_box, neg_box, steps_slider, cfg_slider]</div>
+                        <div className="text-green-400 font-bold">inputs=[prompt_box, neg_box, steps_slider, cfg_slider, sampler_dropdown]</div>
+                    </div>
+                  </div>
+
+               </div>
+               
+               <div className="mt-4 flex items-start gap-2 text-xs text-orange-300 bg-orange-500/10 p-3 rounded-lg">
+                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                 <p>
+                   <strong>Lógica:</strong> O Gradio pega o valor da tela → coloca na lista de inputs → passa como argumento para <code>on_generate</code> → que finalmente entrega para <code>generate_image</code>.
+                 </p>
                </div>
             </div>
 
-            <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
-               <h3 className="text-lg font-bold text-white mb-4">Código do Launcher (.bat)</h3>
-               <p className="text-gray-400 text-sm mb-4">
-                 Caso precise recriar o arquivo <code>run_system_python.bat</code> no futuro.
-               </p>
-               <div className="bg-black/50 p-4 rounded-xl border border-white/5 flex flex-col gap-2 group relative">
-                  <pre className="text-gray-300 font-mono text-xs">{batContent}</pre>
-                  <button
-                    onClick={() => copyToClipboard(batContent, 'bat')}
-                    className="absolute top-2 right-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                  >
-                    {copiedId === 'bat' ? <Check size={16} /> : <Copy size={16} />}
-                  </button>
-               </div>
-            </div>
-            
-            <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
-               <h3 className="text-lg font-bold text-white mb-4">Comando de Instalação Completa (Backup)</h3>
-               <p className="text-gray-400 text-sm mb-4">
-                 Se formatar o PC, use este comando para restaurar todas as libs no Python 3.12.
-               </p>
-               <div className="bg-black/50 p-4 rounded-xl border border-white/5">
-                  <code className="text-yellow-500 font-mono text-xs break-all">
-                    py -3.12 -m pip install torchsde einops transformers scipy psutil kornia imageio-ffmpeg torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
-                  </code>
-               </div>
+            {/* Previous Fixes (Collapsed/Secondary) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-75 hover:opacity-100 transition-opacity">
+              <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
+                 <h3 className="text-md font-bold text-white mb-2 flex items-center gap-2">
+                   <FileVideo size={16} /> ComfyUI FFmpeg
+                 </h3>
+                 <p className="text-gray-400 text-xs mb-3">Se tiver erro de vídeo no ComfyUI:</p>
+                 <div className="bg-black/50 p-2 rounded-lg border border-white/5 flex items-center justify-between">
+                    <code className="text-gray-300 font-mono text-[10px]">pip install imageio-ffmpeg</code>
+                    <button onClick={() => copyToClipboard('py -3.12 -m pip install imageio-ffmpeg', 'ff')} className="text-gray-400 hover:text-white"><Copy size={14}/></button>
+                 </div>
+              </div>
+
+              <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
+                 <h3 className="text-md font-bold text-white mb-2 flex items-center gap-2">
+                   <Terminal size={16} /> Reinstalar Libs
+                 </h3>
+                 <p className="text-gray-400 text-xs mb-3">Comando de emergência:</p>
+                 <div className="bg-black/50 p-2 rounded-lg border border-white/5 flex items-center justify-between">
+                    <code className="text-gray-300 font-mono text-[10px] truncate mr-2">pip install torchsde einops...</code>
+                    <button onClick={() => copyToClipboard('py -3.12 -m pip install torchsde einops transformers scipy psutil kornia requests tqdm pyyaml pillow', 'libs')} className="text-gray-400 hover:text-white"><Copy size={14}/></button>
+                 </div>
+              </div>
             </div>
           </motion.div>
         )}
