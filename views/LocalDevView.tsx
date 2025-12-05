@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, PlayCircle, Package, CheckCircle, Upload, ArrowRight, Download, AlertTriangle, FileVideo, Code, Bug, FileCode } from 'lucide-react';
+import { Copy, Check, Terminal, PlayCircle, Package, CheckCircle, Upload, ArrowRight, Download, AlertTriangle, FileVideo, Code, Bug, FileCode, Zap, Clock } from 'lucide-react';
 import { COMFY_WORKFLOWS } from '../data';
 import { motion } from 'framer-motion';
 
@@ -13,114 +13,128 @@ export const LocalDevView: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const fullInterfaceCode = `import gradio as gr
-import os
-from backend.image_generation import generate_image
-from backend.lora_loader import list_loras, set_lora_directory
+  const optimizedBackendCode = `import torch
+from diffusers import DiffusionPipeline, AutoencoderKL
+import gc
 
-def create_interface(app_state):
-    # Lista inicial de LoRAs
-    lora_list = list_loras()
+def load_models():
+    print("🚀 Carregando SDXL com Otimização CUDA + FP16...")
     
-    # Samplers comuns do SDXL
-    samplers = ["euler", "euler_a", "dpm++_2m", "dpm++_sde_karras", "ddim", "uni_pc"]
+    # 1. Carregar VAE em fp16 (Essencial para não estourar memória na 4070)
+    vae = AutoencoderKL.from_pretrained(
+        "madebyollin/sdxl-vae-fp16-fix", 
+        torch_dtype=torch.float16
+    )
 
-    with gr.Blocks(title="SDXL Studio") as demo:
-        gr.Markdown("# 🎨 **SDXL Studio — Interface Avançada**")
+    # 2. Carregar Base Model diretamente na GPU
+    pipe_base = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-base-1.0",
+        vae=vae,
+        torch_dtype=torch.float16,
+        variant="fp16",
+        use_safetensors=True
+    ).to("cuda")
 
-        with gr.Row():
-            with gr.Column(scale=1):
-                # --- INPUTS ---
-                prompt = gr.Textbox(label="Prompt", placeholder="Descreva a imagem...")
-                
-                # Mantemos o campo visual, mas não vamos enviar ao backend por enquanto
-                negative = gr.Textbox(label="Negative Prompt (Ignorado pelo backend atual)", placeholder="O que evitar...")
-                
-                steps = gr.Slider(10, 60, value=35, label="Steps", step=1)
-                cfg = gr.Slider(1.0, 15.0, value=7.5, step=0.1, label="CFG Scale")
-                
-                # O input de Sampler
-                sampler = gr.Dropdown(
-                    label="Sampler", 
-                    choices=samplers, 
-                    value="euler_a",
-                    interactive=True
-                )
+    # 3. Carregar Refiner reutilizando componentes para economizar VRAM
+    pipe_refiner = DiffusionPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-refiner-1.0",
+        text_encoder_2=pipe_base.text_encoder_2,
+        vae=pipe_base.vae,
+        torch_dtype=torch.float16,
+        variant="fp16",
+        use_safetensors=True,
+    ).to("cuda")
 
-                # --- LORA SECTION ---
-                lora_folder = gr.Textbox(
-                    label="Pasta de LoRAs",
-                    value=os.path.abspath("loras"),
-                    interactive=True
-                )
-                update_lora_btn = gr.Button("Atualizar pasta de LoRAs")
-                
-                lora_dropdown = gr.Dropdown(label="Selecione LoRA", choices=lora_list, value=None)
-                lora_picker = gr.File(label="Ou arquivo LoRA (.safetensors)", file_types=[".safetensors"])
+    # Habilitar xFormers se disponível (Aumenta velocidade em 20%)
+    try:
+        pipe_base.enable_xformers_memory_efficient_attention()
+        pipe_refiner.enable_xformers_memory_efficient_attention()
+        print("✅ xFormers ativado!")
+    except:
+        print("⚠️ xFormers não encontrado (pip install xformers), usando padrão.")
 
-                generate_btn = gr.Button("Gerar imagem", variant="primary")
+    return pipe_base, pipe_refiner
 
-            with gr.Column(scale=1):
-                output_image = gr.Image(label="Resultado", type="numpy")
+def generate_image(pipe_base, pipe_refiner, prompt, negative, steps, cfg, sampler, lora_path=None):
+    
+    # Limpeza de memória antes de começar
+    gc.collect()
+    torch.cuda.empty_cache()
 
-        # --- LOGIC ---
+    # Generator para reprodutibilidade
+    generator = torch.Generator("cuda").manual_seed(42)
 
-        def update_loras(new_folder):
-            set_lora_directory(new_folder)
-            return gr.update(choices=list_loras())
+    # Carregar LoRA se houver
+    if lora_path:
+        print(f"📦 Carregando LoRA: {lora_path}")
+        pipe_base.load_lora_weights(lora_path)
+        pipe_base.fuse_lora(lora_scale=0.7)
 
-        update_lora_btn.click(fn=update_loras, inputs=[lora_folder], outputs=[lora_dropdown])
+    # Definir divisão de steps (80% Base / 20% Refiner)
+    high_noise_steps = int(steps * 0.8)
+    
+    print(f"⚡ Gerando: {steps} steps (Base: {high_noise_steps}, Refiner: {steps - high_noise_steps})")
 
-        def on_generate(prompt, negative, steps, cfg, sampler, lora_choice, lora_file):
-            lora_path = None
-            if lora_file is not None:
-                lora_path = lora_file.name
-            elif lora_choice:
-                lora_path = lora_choice
+    # 1. GERAÇÃO BASE
+    latent_image = pipe_base(
+        prompt=prompt,
+        negative_prompt=negative, # Agora aceitamos o negativo!
+        num_inference_steps=steps,
+        denoising_end=0.8,
+        guidance_scale=cfg,
+        output_type="latent",
+        generator=generator
+    ).images
 
-            # CORREÇÃO CRÍTICA: 
-            # Sua função 'generate_image' no backend não aceita 'negative' nem 'negative_prompt'.
-            # Removemos o argumento da chamada abaixo para o código funcionar.
-            
-            return generate_image(
-                pipe_base=app_state.pipe_base,
-                pipe_refiner=app_state.pipe_refiner,
-                prompt=prompt,
-                # negative=negative,  <-- REMOVIDO PARA EVITAR ERRO
-                steps=steps,
-                cfg=cfg,
-                lora_path=lora_path,
-                sampler=sampler
-            )
+    # 2. REFINER
+    print("✨ Refinando...")
+    image = pipe_refiner(
+        prompt=prompt,
+        negative_prompt=negative,
+        num_inference_steps=steps,
+        denoising_start=0.8,
+        image=latent_image,
+        guidance_scale=cfg,
+        generator=generator
+    ).images[0]
 
-        # Botão conectado
-        generate_btn.click(
-            fn=on_generate,
-            inputs=[prompt, negative, steps, cfg, sampler, lora_dropdown, lora_picker],
-            outputs=[output_image]
-        )
+    # Descarregar LoRA
+    if lora_path:
+        pipe_base.unfuse_lora()
+        pipe_base.unload_lora_weights()
 
-    return demo`;
+    return image`;
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Success Header */}
-      <div className="bg-green-900/20 border-l-4 border-green-500 p-6 rounded-r-xl">
+      {/* Analysis Header */}
+      <div className="bg-yellow-900/20 border-l-4 border-yellow-500 p-6 rounded-r-xl">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-green-500/10 rounded-lg text-green-500 shadow-[0_0_15px_rgba(0,255,0,0.2)]">
-            <CheckCircle size={32} />
+          <div className="p-3 bg-yellow-500/10 rounded-lg text-yellow-500 shadow-[0_0_15px_rgba(255,165,0,0.2)]">
+            <Clock size={32} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Sistema Operacional</h2>
-            <p className="text-gray-400 text-sm">
-              Python 3.12 • PyTorch 2.5.1 • CUDA • RTX 4070 Ti Super Detectada
-            </p>
+            <h2 className="text-2xl font-bold text-white">Análise de Performance</h2>
+            <div className="flex items-center gap-4 mt-1">
+               <span className="text-gray-400 text-sm">Atual: <span className="text-red-400 font-mono">13 min/img</span> (CPU)</span>
+               <ArrowRight size={14} className="text-gray-600"/>
+               <span className="text-gray-400 text-sm">Meta: <span className="text-green-400 font-mono">~15 seg/img</span> (RTX 4070 Ti)</span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-white/10">
+        <button 
+          onClick={() => setActiveTab('maintenance')}
+          className={`px-6 py-3 font-medium text-sm transition-colors relative ${
+            activeTab === 'maintenance' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          Otimização (GPU)
+          {activeTab === 'maintenance' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500"></div>}
+        </button>
         <button 
           onClick={() => setActiveTab('workflows')}
           className={`px-6 py-3 font-medium text-sm transition-colors relative ${
@@ -129,15 +143,6 @@ def create_interface(app_state):
         >
           Biblioteca de Workflows
           {activeTab === 'workflows' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-neon-purple"></div>}
-        </button>
-        <button 
-          onClick={() => setActiveTab('maintenance')}
-          className={`px-6 py-3 font-medium text-sm transition-colors relative ${
-            activeTab === 'maintenance' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
-          }`}
-        >
-          Debug & Manutenção
-          {activeTab === 'maintenance' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500"></div>}
         </button>
       </div>
 
@@ -221,66 +226,48 @@ def create_interface(app_state):
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            {/* FULL FIX CARD */}
-            <div className="bg-gradient-to-br from-green-900/30 to-blue-900/30 border border-green-500/40 p-6 rounded-2xl">
+            {/* BACKEND FIX CARD */}
+            <div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 border border-blue-500/40 p-6 rounded-2xl">
                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <FileCode className="text-green-400" size={24} />
-                    <h3 className="text-xl font-bold text-white">Correção Final: interface.py</h3>
+                    <Zap className="text-blue-400" size={24} />
+                    <h3 className="text-xl font-bold text-white">Passo 1: Aceleração GPU (Obrigatório)</h3>
                   </div>
                   <button 
-                    onClick={() => copyToClipboard(fullInterfaceCode, 'full-code')} 
-                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-black font-bold rounded-lg hover:bg-green-400 transition-colors"
+                    onClick={() => copyToClipboard(optimizedBackendCode, 'backend-code')} 
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-400 transition-colors"
                   >
-                    {copiedId === 'full-code' ? <Check size={16} /> : <Copy size={16} />}
-                    {copiedId === 'full-code' ? 'Copiado!' : 'Copiar Tudo'}
+                    {copiedId === 'backend-code' ? <Check size={16} /> : <Copy size={16} />}
+                    {copiedId === 'backend-code' ? 'Copiado!' : 'Copiar Código'}
                   </button>
                </div>
                
-               {/* NEW BUG NOTIFICATION */}
-               <div className="mb-4 bg-orange-500/10 border border-orange-500/50 p-3 rounded-lg flex items-center gap-3 text-sm text-orange-200">
-                  <Bug size={16} className="shrink-0" />
-                  <span>
-                    <strong>Problema Detectado:</strong> Seu backend <code>generate_image</code> não possui suporte a Negative Prompt.
-                    <br/>
-                    <strong>Solução:</strong> Removi o parâmetro da chamada da função no código abaixo para evitar o erro e permitir a geração.
-                  </span>
-               </div>
-               
                <p className="text-gray-300 text-sm mb-4">
-                 Substitua <strong>todo</strong> o conteúdo do arquivo <code>ui/interface.py</code> pelo código abaixo.
+                 Seu arquivo atual não está usando a placa de vídeo. Crie ou substitua o arquivo <code>backend/image_generation.py</code> com este código otimizado. Ele ativa <code>cuda</code> e <code>float16</code>.
                </p>
                
-               <div className="bg-[#1e1e1e] p-4 rounded-xl border border-white/10 font-mono text-xs overflow-x-auto max-h-[400px] overflow-y-auto">
+               <div className="bg-[#1e1e1e] p-4 rounded-xl border border-white/10 font-mono text-xs overflow-x-auto max-h-[300px] overflow-y-auto">
                   <pre className="text-gray-300">
-                    {fullInterfaceCode}
+                    {optimizedBackendCode}
                   </pre>
                </div>
             </div>
 
-            {/* Previous Fixes (Collapsed/Secondary) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-75 hover:opacity-100 transition-opacity">
-              <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
-                 <h3 className="text-md font-bold text-white mb-2 flex items-center gap-2">
-                   <FileVideo size={16} /> ComfyUI FFmpeg
-                 </h3>
-                 <p className="text-gray-400 text-xs mb-3">Se tiver erro de vídeo no ComfyUI:</p>
-                 <div className="bg-black/50 p-2 rounded-lg border border-white/5 flex items-center justify-between">
-                    <code className="text-gray-300 font-mono text-[10px]">pip install imageio-ffmpeg</code>
-                    <button onClick={() => copyToClipboard('py -3.12 -m pip install imageio-ffmpeg', 'ff')} className="text-gray-400 hover:text-white"><Copy size={14}/></button>
+            {/* INTERFACE FIX CARD */}
+            <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
+                 <div className="flex items-center gap-3 mb-2">
+                    <FileCode size={20} className="text-green-400"/>
+                    <h3 className="text-md font-bold text-white">Passo 2: Reativar Negative Prompt</h3>
                  </div>
-              </div>
-
-              <div className="bg-dark-800 p-6 rounded-2xl border border-white/10">
-                 <h3 className="text-md font-bold text-white mb-2 flex items-center gap-2">
-                   <Terminal size={16} /> Reinstalar Libs
-                 </h3>
-                 <p className="text-gray-400 text-xs mb-3">Comando de emergência:</p>
-                 <div className="bg-black/50 p-2 rounded-lg border border-white/5 flex items-center justify-between">
-                    <code className="text-gray-300 font-mono text-[10px] truncate mr-2">pip install torchsde einops...</code>
-                    <button onClick={() => copyToClipboard('py -3.12 -m pip install torchsde einops transformers scipy psutil kornia requests tqdm pyyaml pillow', 'libs')} className="text-gray-400 hover:text-white"><Copy size={14}/></button>
+                 <p className="text-gray-400 text-xs mb-3">
+                   Agora que o backend foi corrigido (acima), volte no arquivo <code>interface.py</code> e remova o comentário da linha do negative prompt:
+                 </p>
+                 <div className="bg-black/50 p-3 rounded-lg border border-white/5 font-mono text-xs text-gray-300">
+                    <span className="text-gray-500"># Antes:</span><br/>
+                    <span className="line-through text-red-400/50"># negative=negative,</span><br/><br/>
+                    <span className="text-gray-500"># Agora:</span><br/>
+                    <span className="text-green-400">negative=negative,</span>
                  </div>
-              </div>
             </div>
           </motion.div>
         )}
