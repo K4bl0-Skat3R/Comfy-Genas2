@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, PlayCircle, Package, CheckCircle, Upload, ArrowRight, Download, AlertTriangle, FileVideo, Code, Bug } from 'lucide-react';
+import { Copy, Check, Terminal, PlayCircle, Package, CheckCircle, Upload, ArrowRight, Download, AlertTriangle, FileVideo, Code, Bug, FileCode } from 'lucide-react';
 import { COMFY_WORKFLOWS } from '../data';
 import { motion } from 'framer-motion';
 
@@ -13,10 +13,94 @@ export const LocalDevView: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const batContent = `@echo off
-echo --- RODANDO COMFYUI COM PYTHON 3.12 DO SISTEMA ---
-py -3.12 main.py --force-fp16 --cuda-device 0
-pause`;
+  const fullInterfaceCode = `import gradio as gr
+import os
+from backend.image_generation import generate_image
+from backend.lora_loader import list_loras, set_lora_directory
+
+def create_interface(app_state):
+    # Lista inicial de LoRAs
+    lora_list = list_loras()
+    
+    # Samplers comuns do SDXL
+    samplers = ["euler", "euler_a", "dpm++_2m", "dpm++_sde_karras", "ddim", "uni_pc"]
+
+    with gr.Blocks(title="SDXL Studio") as demo:
+        gr.Markdown("# 🎨 **SDXL Studio — Interface Avançada**")
+
+        with gr.Row():
+            with gr.Column(scale=1):
+                # --- INPUTS ---
+                prompt = gr.Textbox(label="Prompt", placeholder="Descreva a imagem...")
+                
+                # Mantemos o campo visual, mas não vamos enviar ao backend por enquanto
+                negative = gr.Textbox(label="Negative Prompt (Ignorado pelo backend atual)", placeholder="O que evitar...")
+                
+                steps = gr.Slider(10, 60, value=35, label="Steps", step=1)
+                cfg = gr.Slider(1.0, 15.0, value=7.5, step=0.1, label="CFG Scale")
+                
+                # O input de Sampler
+                sampler = gr.Dropdown(
+                    label="Sampler", 
+                    choices=samplers, 
+                    value="euler_a",
+                    interactive=True
+                )
+
+                # --- LORA SECTION ---
+                lora_folder = gr.Textbox(
+                    label="Pasta de LoRAs",
+                    value=os.path.abspath("loras"),
+                    interactive=True
+                )
+                update_lora_btn = gr.Button("Atualizar pasta de LoRAs")
+                
+                lora_dropdown = gr.Dropdown(label="Selecione LoRA", choices=lora_list, value=None)
+                lora_picker = gr.File(label="Ou arquivo LoRA (.safetensors)", file_types=[".safetensors"])
+
+                generate_btn = gr.Button("Gerar imagem", variant="primary")
+
+            with gr.Column(scale=1):
+                output_image = gr.Image(label="Resultado", type="numpy")
+
+        # --- LOGIC ---
+
+        def update_loras(new_folder):
+            set_lora_directory(new_folder)
+            return gr.update(choices=list_loras())
+
+        update_lora_btn.click(fn=update_loras, inputs=[lora_folder], outputs=[lora_dropdown])
+
+        def on_generate(prompt, negative, steps, cfg, sampler, lora_choice, lora_file):
+            lora_path = None
+            if lora_file is not None:
+                lora_path = lora_file.name
+            elif lora_choice:
+                lora_path = lora_choice
+
+            # CORREÇÃO CRÍTICA: 
+            # Sua função 'generate_image' no backend não aceita 'negative' nem 'negative_prompt'.
+            # Removemos o argumento da chamada abaixo para o código funcionar.
+            
+            return generate_image(
+                pipe_base=app_state.pipe_base,
+                pipe_refiner=app_state.pipe_refiner,
+                prompt=prompt,
+                # negative=negative,  <-- REMOVIDO PARA EVITAR ERRO
+                steps=steps,
+                cfg=cfg,
+                lora_path=lora_path,
+                sampler=sampler
+            )
+
+        # Botão conectado
+        generate_btn.click(
+            fn=on_generate,
+            inputs=[prompt, negative, steps, cfg, sampler, lora_dropdown, lora_picker],
+            outputs=[output_image]
+        )
+
+    return demo`;
 
   return (
     <div className="space-y-6 pb-20">
@@ -137,49 +221,40 @@ pause`;
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            {/* PYTHON BUG FIX CARD */}
-            <div className="bg-orange-900/20 border border-orange-500 p-6 rounded-2xl animate-pulse">
-               <div className="flex items-center gap-3 mb-4">
-                  <Bug className="text-orange-500" size={24} />
-                  <h3 className="text-xl font-bold text-white">Erro de Escopo: Variável "sampler" não existe</h3>
+            {/* FULL FIX CARD */}
+            <div className="bg-gradient-to-br from-green-900/30 to-blue-900/30 border border-green-500/40 p-6 rounded-2xl">
+               <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <FileCode className="text-green-400" size={24} />
+                    <h3 className="text-xl font-bold text-white">Correção Final: interface.py</h3>
+                  </div>
+                  <button 
+                    onClick={() => copyToClipboard(fullInterfaceCode, 'full-code')} 
+                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-black font-bold rounded-lg hover:bg-green-400 transition-colors"
+                  >
+                    {copiedId === 'full-code' ? <Check size={16} /> : <Copy size={16} />}
+                    {copiedId === 'full-code' ? 'Copiado!' : 'Copiar Tudo'}
+                  </button>
                </div>
+               
+               {/* NEW BUG NOTIFICATION */}
+               <div className="mb-4 bg-orange-500/10 border border-orange-500/50 p-3 rounded-lg flex items-center gap-3 text-sm text-orange-200">
+                  <Bug size={16} className="shrink-0" />
+                  <span>
+                    <strong>Problema Detectado:</strong> Seu backend <code>generate_image</code> não possui suporte a Negative Prompt.
+                    <br/>
+                    <strong>Solução:</strong> Removi o parâmetro da chamada da função no código abaixo para evitar o erro e permitir a geração.
+                  </span>
+               </div>
+               
                <p className="text-gray-300 text-sm mb-4">
-                 Exatamente! Você está tentando usar <code>sampler=sampler</code>, mas a variável não foi definida dentro da função. O Python não sabe de onde tirar esse valor.
+                 Substitua <strong>todo</strong> o conteúdo do arquivo <code>ui/interface.py</code> pelo código abaixo.
                </p>
                
-               <div className="bg-black/80 p-4 rounded-xl border border-orange-500/30 font-mono text-xs overflow-x-auto space-y-6">
-                  
-                  {/* STEP 1 */}
-                  <div>
-                    <div className="flex items-center justify-between text-gray-400 mb-2 border-b border-gray-700 pb-2">
-                        <span className="font-bold text-white">PASSO 1: Receber na função (interface.py)</span>
-                    </div>
-                    <div className="space-y-1">
-                        <p className="text-gray-500 text-[10px]">Altere a definição da função on_generate:</p>
-                        <div className="opacity-50 text-red-400 line-through">def on_generate(prompt, negative, steps, cfg):</div>
-                        <div className="text-green-400 font-bold">def on_generate(prompt, negative, steps, cfg, sampler):</div>
-                    </div>
-                  </div>
-
-                  {/* STEP 2 */}
-                  <div>
-                    <div className="flex items-center justify-between text-gray-400 mb-2 border-b border-gray-700 pb-2">
-                        <span className="font-bold text-white">PASSO 2: Enviar pelo Gradio (ui.py ou main.py)</span>
-                    </div>
-                    <div className="space-y-1">
-                        <p className="text-gray-500 text-[10px]">Procure onde o botão é clicado (btn.click) e adicione o componente do sampler na lista:</p>
-                        <div className="opacity-50 text-red-400 line-through">inputs=[prompt_box, neg_box, steps_slider, cfg_slider]</div>
-                        <div className="text-green-400 font-bold">inputs=[prompt_box, neg_box, steps_slider, cfg_slider, sampler_dropdown]</div>
-                    </div>
-                  </div>
-
-               </div>
-               
-               <div className="mt-4 flex items-start gap-2 text-xs text-orange-300 bg-orange-500/10 p-3 rounded-lg">
-                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                 <p>
-                   <strong>Lógica:</strong> O Gradio pega o valor da tela → coloca na lista de inputs → passa como argumento para <code>on_generate</code> → que finalmente entrega para <code>generate_image</code>.
-                 </p>
+               <div className="bg-[#1e1e1e] p-4 rounded-xl border border-white/10 font-mono text-xs overflow-x-auto max-h-[400px] overflow-y-auto">
+                  <pre className="text-gray-300">
+                    {fullInterfaceCode}
+                  </pre>
                </div>
             </div>
 
