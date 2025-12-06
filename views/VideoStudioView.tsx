@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, FileCode, Film, AlertTriangle, ExternalLink, Key, Sliders, Mic } from 'lucide-react';
+import { Copy, Check, FileCode, Film, AlertTriangle, ExternalLink, Key, Sliders, Type, Image as ImageIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const VideoStudioView: React.FC = () => {
@@ -13,7 +13,7 @@ export const VideoStudioView: React.FC = () => {
 
   const videoScriptCode = `import gradio as gr
 import torch
-from diffusers import StableVideoDiffusionPipeline
+from diffusers import StableVideoDiffusionPipeline, AutoPipelineForText2Image
 from diffusers.utils import load_image, export_to_video
 from huggingface_hub import login
 import os
@@ -21,25 +21,27 @@ import gc
 import sys
 from datetime import datetime
 
-# --- CINE ENGINE V5 (Avatar Stability Edition) ---
-# Foco: Evitar "derretimento" de rostos.
-# 1. Configurações otimizadas para "Talking Heads" (Baixo movimento).
-# 2. Correção de VAE Tiling (Evita erro de memória na renderização).
-# 3. Fix de warnings (dtype).
+# --- CINE ENGINE V6 (HYBRID STUDIO) ---
+# Funcionalidade Dupla:
+# 1. Image-to-Video (Upload de Avatar pronto).
+# 2. Text-to-Video (Gera imagem via SDXL Turbo -> Anima via SVD).
 
 print(f"🐍 Python: {sys.version.split()[0]}")
 if torch.cuda.is_available():
     print(f"🎮 GPU Ativa: {torch.cuda.get_device_name(0)}")
 
-pipe = None
-MODEL_ID = "stabilityai/stable-video-diffusion-img2vid-xt-1-1"
+pipe_video = None
+pipe_image = None
 
-def load_model(token=None):
-    global pipe
-    if pipe: return "✅ Engine V5 Pronta!"
+MODEL_VIDEO = "stabilityai/stable-video-diffusion-img2vid-xt-1-1"
+MODEL_IMAGE = "stabilityai/sdxl-turbo" # Rápido e leve para gerar a base
+
+def load_models(token=None):
+    global pipe_video, pipe_image
+    
+    if pipe_video and pipe_image: return "✅ Sistema Híbrido Pronto!"
     
     if token and token.strip():
-        print(f"🔑 Verificando token...")
         try:
             login(token=token)
         except Exception as e:
@@ -47,111 +49,156 @@ def load_model(token=None):
 
     gc.collect()
     torch.cuda.empty_cache()
-    print("⏳ Carregando SVD-XT V5...")
+    print("⏳ Carregando Motores Híbridos (Isso usa CPU Offload para economizar VRAM)...")
     
     try:
-        pipe = StableVideoDiffusionPipeline.from_pretrained(
-            MODEL_ID,
-            dtype=torch.float16, # V5 Fix: dtype correto
+        # 1. Carrega Gerador de Imagem (SDXL Turbo)
+        pipe_image = AutoPipelineForText2Image.from_pretrained(
+            MODEL_IMAGE,
+            torch_dtype=torch.float16,
             variant="fp16"
         )
-        # OTIMIZAÇÕES CRÍTICAS V5
-        pipe.enable_model_cpu_offload()
-        pipe.enable_vae_slicing()
-        pipe.enable_vae_tiling() # V5 Fix: Resolve o crash na renderização final
+        pipe_image.enable_model_cpu_offload() # Essencial para rodar junto com SVD
         
-        print("✅ CineEngine V5 Carregada com Sucesso!")
-        return "✅ Pronto para gerar."
+        # 2. Carrega Gerador de Vídeo (SVD)
+        pipe_video = StableVideoDiffusionPipeline.from_pretrained(
+            MODEL_VIDEO,
+            dtype=torch.float16,
+            variant="fp16"
+        )
+        pipe_video.enable_model_cpu_offload()
+        pipe_video.enable_vae_slicing()
+        pipe_video.enable_vae_tiling() # Fix V4/V5
+        
+        print("✅ CineEngine V6 (Hybrid) Carregada!")
+        return "✅ Pronto! Modos Texto e Imagem ativos."
     except Exception as e:
-        if "401" in str(e): return "⚠️ Token Necessário (Erro 401)"
         return f"❌ Erro: {str(e)}"
 
-def generate_video(image, mode, fps):
-    global pipe
-    if pipe is None: return None, "⚠️ Carregue o modelo primeiro."
-    if image is None: return None, "⚠️ Envie uma imagem."
-
-    # PRESETS V5 - O SEGREDO DA ESTABILIDADE
-    # Rostos deformam se o Motion Bucket for > 50.
-    # Para "Ensinar", queremos apenas respiração leve (Idle).
-    if mode == "Avatar Falando (Estável)":
-        motion_bucket_id = 40  # Baixo movimento = Rosto Perfeito
-        noise_aug_strength = 0.05
-    elif mode == "Movimento Médio":
-        motion_bucket_id = 100
-        noise_aug_strength = 0.1
-    else: # Ação / Cinematic
-        motion_bucket_id = 180 # Muito movimento = Deformação aceitável em paisagens
-        noise_aug_strength = 0.15
-
-    # Resize Inteligente (1024x576 é o nativo do SVD-XT)
-    w, h = image.size
-    aspect = w / h
-    if aspect > 1: # Paisagem
-        image = image.resize((1024, 576))
-    else: # Retrato (Força crop para 576x1024 vertical se necessário, mas SVD prefere landscape)
-        # Vamos manter 1024x576 e adicionar barras ou crop para evitar erro
-        image = image.resize((1024, 576)) 
-
-    generator = torch.manual_seed(42)
+def process_pipeline(image_input, prompt_input, mode_source, motion_mode, fps):
+    global pipe_video, pipe_image
     
-    print(f"🎬 Renderizando: {mode} (Bucket: {motion_bucket_id})...")
+    if pipe_video is None: return None, None, "⚠️ Carregue os modelos primeiro."
+
+    # FASE 1: Obter a Imagem Base
+    target_image = None
+    
+    if mode_source == "Usar Imagem Pronta (Upload)":
+        if image_input is None: return None, None, "⚠️ Faça upload da imagem."
+        target_image = image_input
+        status_step1 = "✅ Imagem carregada."
+    else:
+        # Modo Texto: Gerar Imagem na hora
+        if not prompt_input: return None, None, "⚠️ Digite um prompt."
+        print(f"🎨 Criando Avatar: '{prompt_input}'...")
+        target_image = pipe_image(
+            prompt=prompt_input, 
+            num_inference_steps=1, # Turbo precisa só de 1 step
+            guidance_scale=0.0,
+            width=1024,
+            height=576 # Formato Cinematic SVD
+        ).images[0]
+        status_step1 = "✅ Avatar criado via SDXL Turbo."
+
+    # Resize de segurança
+    target_image = target_image.resize((1024, 576))
+
+    # FASE 2: Configurar Movimento
+    if motion_mode == "Avatar Falando (Estável)":
+        bucket_id = 40
+        aug = 0.05
+    elif motion_mode == "Movimento Médio":
+        bucket_id = 100
+        aug = 0.1
+    else:
+        bucket_id = 180
+        aug = 0.15
+
+    # FASE 3: Gerar Vídeo
+    generator = torch.manual_seed(42)
+    print(f"🎬 Animando (Bucket: {bucket_id})...")
     
     try:
-        frames = pipe(
-            image, 
-            decode_chunk_size=2, # Menor uso de VRAM
+        frames = pipe_video(
+            target_image, 
+            decode_chunk_size=2,
             generator=generator,
-            motion_bucket_id=motion_bucket_id,
-            noise_aug_strength=noise_aug_strength,
+            motion_bucket_id=bucket_id,
+            noise_aug_strength=aug,
             num_frames=25,
         ).frames[0]
 
         os.makedirs("outputs/videos", exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_path = f"outputs/videos/video_{timestamp}.mp4"
+        output_path = f"outputs/videos/v6_{timestamp}.mp4"
         
         export_to_video(frames, output_path, fps=fps)
-        return output_path, f"✅ Gerado: {output_path}"
+        
+        return target_image, output_path, f"{status_step1} -> Vídeo Gerado com Sucesso!"
     except Exception as e:
-        print(f"❌ Erro: {e}")
-        return None, f"Erro: {str(e)}"
+        return target_image, None, f"Erro na renderização: {e}"
 
-# UI V5
+# UI V6
 with gr.Blocks() as app:
-    gr.Markdown("# 🎬 CineEngine V5: Avatar Stability")
+    gr.Markdown("# 🎬 CineEngine V6: Hybrid Studio")
+    gr.Markdown("Crie vídeos a partir de Uploads OU Prompts de Texto.")
     
     with gr.Row():
         with gr.Column(scale=1):
             token_input = gr.Textbox(label="Token HuggingFace (Write)", type="password")
-            btn_auth = gr.Button("1. Iniciar Engine", variant="primary")
+            btn_auth = gr.Button("1. Iniciar Motor Híbrido", variant="primary")
             auth_status = gr.Textbox(label="Status", value="Parado")
             
-            gr.Markdown("### ℹ️ Guia V5")
-            gr.Markdown("**Por que sem Prompt?** O SVD cria movimento a partir de pixels, não texto. Use o 'Modo' ao lado para controlar a intensidade.")
-            gr.Markdown("**Como fazer ele Falar?** Este vídeo cria o *corpo* (Idle). Para falar, leve este vídeo para uma ferramenta de LipSync (Wav2Lip/LivePortrait).")
+            gr.Markdown("### Configurações")
+            motion_mode = gr.Radio(
+                ["Avatar Falando (Estável)", "Movimento Médio", "Ação Cinemática"],
+                value="Avatar Falando (Estável)",
+                label="Tipo de Movimento"
+            )
+            fps = gr.Slider(6, 30, value=24, label="FPS")
 
         with gr.Column(scale=2):
-            input_image = gr.Image(label="Avatar (Use imagem nítida da V20)", type="pil")
-            
-            with gr.Row():
-                mode = gr.Radio(
-                    ["Avatar Falando (Estável)", "Movimento Médio", "Ação Cinemática"],
-                    value="Avatar Falando (Estável)",
-                    label="Tipo de Movimento (Motion Bucket)"
-                )
-                fps = gr.Slider(6, 30, value=24, label="FPS do Vídeo")
-            
-            btn_gen = gr.Button("2. GERAR VÍDEO BASE", variant="secondary")
-            output_video = gr.Video(label="Resultado (Loop de 2-4s)")
-            gen_status = gr.Textbox(label="Log de Renderização")
+            with gr.Tabs():
+                with gr.Tab("Opção A: Upload de Imagem"):
+                    input_image_upload = gr.Image(label="Arraste seu Avatar aqui", type="pil")
+                    btn_gen_upload = gr.Button("🎬 Animar Upload", variant="secondary")
+                
+                with gr.Tab("Opção B: Criar por Texto"):
+                    prompt_input = gr.Textbox(label="Descreva o Avatar", placeholder="Ex: cinematic shot of a cyberpunk hacker, neon lights, 8k, realistic...")
+                    btn_gen_text = gr.Button("🎨 Criar & Animar", variant="secondary")
 
-    btn_auth.click(fn=load_model, inputs=[token_input], outputs=[auth_status])
-    btn_gen.click(fn=generate_video, inputs=[input_image, mode, fps], outputs=[output_video, gen_status])
+            gr.Markdown("### Resultado")
+            with gr.Row():
+                out_image = gr.Image(label="Imagem Base (Gerada ou Upload)", type="pil", interactive=False)
+                out_video = gr.Video(label="Vídeo Final")
+            
+            status_final = gr.Textbox(label="Log de Processamento")
+
+    # Logica de Eventos
+    # Wrapper para passar o modo correto
+    def run_upload(img, mode, f):
+        return process_pipeline(img, None, "Usar Imagem Pronta (Upload)", mode, f)
+
+    def run_text(prompt, mode, f):
+        return process_pipeline(None, prompt, "Criar via Texto", mode, f)
+
+    btn_auth.click(fn=load_models, inputs=[token_input], outputs=[auth_status])
+    
+    btn_gen_upload.click(
+        fn=run_upload, 
+        inputs=[input_image_upload, motion_mode, fps], 
+        outputs=[out_image, out_video, status_final]
+    )
+    
+    btn_gen_text.click(
+        fn=run_text, 
+        inputs=[prompt_input, motion_mode, fps], 
+        outputs=[out_image, out_video, status_final]
+    )
 
 if __name__ == "__main__":
     try:
-        load_model()
+        load_models()
     except:
         pass
     app.launch(inbrowser=True)
@@ -160,21 +207,19 @@ if __name__ == "__main__":
   return (
     <div className="space-y-6 pb-20">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-950 to-black border-l-4 border-purple-500 p-6 rounded-r-xl">
+      <div className="bg-gradient-to-r from-indigo-950 to-black border-l-4 border-indigo-500 p-6 rounded-r-xl">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-purple-600/20 rounded-lg text-purple-400">
+          <div className="p-3 bg-indigo-600/20 rounded-lg text-indigo-400">
             <Film size={32} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">CineEngine V5 (Avatar Stability)</h2>
+            <h2 className="text-2xl font-bold text-white">CineEngine V6 (Hybrid Studio)</h2>
             <div className="flex items-center gap-4 mt-1">
                <span className="text-gray-300 text-sm">
-                 <strong>Solução para Deformação:</strong>
+                 <strong>O Melhor dos Dois Mundos:</strong>
                  <br/>
-                 O SVD padrão "derrete" rostos porque tenta criar muito movimento.
-                 A <strong>V5</strong> adiciona o modo <strong>"Avatar Falando (Estável)"</strong> que trava o movimento (Motion Bucket = 40).
-                 <br/>
-                 <span className="text-purple-400 text-xs">Isso cria o vídeo "Idle" (respirando/piscando). O LipSync (fala) deve ser aplicado SOBRE este vídeo.</span>
+                 Agora o app carrega dois modelos simultaneamente (SDXL Turbo + SVD).
+                 Você pode fazer upload de um avatar existente OU criar um novo via prompt na aba "Opção B".
                </span>
             </div>
           </div>
@@ -182,47 +227,40 @@ if __name__ == "__main__":
       </div>
 
       {/* Concept Explanation */}
-      <div className="bg-dark-800 p-6 rounded-xl border border-white/10 flex flex-col md:flex-row gap-6 items-center">
-         <div className="flex-1">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+         <div className="bg-dark-800 p-6 rounded-xl border border-white/10">
             <h3 className="font-bold text-white mb-2 flex items-center gap-2">
-                <Sliders size={18} className="text-yellow-500"/> O "Segredo" do Vídeo com Fala
+                <ImageIcon size={18} className="text-blue-500"/> Opção A: Upload (Recomendado)
             </h3>
-            <p className="text-sm text-gray-400 mb-2">
-                Você não gera um vídeo "falando" direto no SVD. O fluxo profissional é:
-            </p>
-            <ol className="list-decimal pl-5 text-sm text-gray-300 space-y-1">
-                <li>Gere a Imagem (App V20).</li>
-                <li>Gere um <strong>Vídeo Idle</strong> (App V5 - Avatar Mode). O personagem apenas pisca e respira.</li>
-                <li>Leve esse vídeo + Áudio para o <strong>LivePortrait</strong> ou <strong>SadTalker</strong>.</li>
-            </ol>
-            <p className="text-xs text-gray-500 mt-2 italic">
-                *O SVD não aceita prompts de texto ("make him talk") porque é um modelo puramente visual.
+            <p className="text-sm text-gray-400">
+               Use a <strong>V20 (App Imagem)</strong> para criar seu avatar com calma, refinar detalhes e depois suba aqui.
+               <br/><br/>
+               <span className="text-green-400">Vantagem:</span> Controle total da aparência.
             </p>
          </div>
          
-         <div className="bg-black/40 p-4 rounded-lg border border-white/5 w-full md:w-64 shrink-0">
-             <div className="flex items-center gap-3 mb-2">
-                <AlertTriangle className="text-yellow-500" size={20} />
-                <span className="text-xs font-bold text-gray-200">Correções V5 Aplicadas</span>
-             </div>
-             <ul className="text-xs text-gray-400 space-y-1">
-                <li>✅ <code>vae_tiling</code> ativado (Fix Crash)</li>
-                <li>✅ <code>dtype</code> atualizado (Fix Warning)</li>
-                <li>✅ Motion Bucket 40 (Fix Face Melt)</li>
-             </ul>
+         <div className="bg-dark-800 p-6 rounded-xl border border-white/10">
+             <h3 className="font-bold text-white mb-2 flex items-center gap-2">
+                <Type size={18} className="text-pink-500"/> Opção B: Prompt de Texto
+             </h3>
+             <p className="text-sm text-gray-400">
+                O script cria a imagem na hora usando <strong>SDXL Turbo</strong> e já manda para animação automaticamente.
+                <br/><br/>
+                <span className="text-green-400">Vantagem:</span> Velocidade (Testes rápidos de ideias).
+             </p>
          </div>
       </div>
 
       {/* Code Block */}
-      <div className="bg-gradient-to-br from-gray-900 to-black border border-purple-500/30 p-6 rounded-2xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-gray-900 to-black border border-indigo-500/30 p-6 rounded-2xl relative overflow-hidden">
          <div className="flex items-center justify-between mb-4 relative z-10">
             <div className="flex items-center gap-3">
-              <FileCode className="text-purple-500" size={24} />
-              <h3 className="text-xl font-bold text-white">app_video_v5.py</h3>
+              <FileCode className="text-indigo-500" size={24} />
+              <h3 className="text-xl font-bold text-white">app_video_v6.py</h3>
             </div>
             <button 
               onClick={() => copyToClipboard(videoScriptCode, 'video-code')} 
-              className="flex items-center gap-2 px-4 py-2 bg-purple-700 text-white font-bold rounded-lg hover:bg-purple-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-700 text-white font-bold rounded-lg hover:bg-indigo-600 transition-colors"
             >
               {copiedId === 'video-code' ? <Check size={16} /> : <Copy size={16} />}
               {copiedId === 'video-code' ? 'Copiado!' : 'Copiar Código'}
