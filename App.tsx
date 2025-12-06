@@ -6,6 +6,7 @@ import { VoiceView } from './views/VoiceView';
 import { AestheticsView } from './views/AestheticsView';
 import { FreeModeView } from './views/FreeModeView';
 import { LocalDevView } from './views/LocalDevView';
+import { VideoStudioView } from './views/VideoStudioView';
 import { Sparkles } from 'lucide-react';
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
       case 'aesthetics': return <AestheticsView />;
       case 'budget': return <FreeModeView />;
       case 'local': return <LocalDevView />;
+      case 'video_studio': return <VideoStudioView />;
       default: return <Dashboard setActiveTab={setActiveTab} />;
     }
   };

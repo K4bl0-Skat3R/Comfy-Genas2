@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Mic, User, Video, Zap, Menu, X, Terminal } from 'lucide-react';
+import { Layers, Mic, User, Video, Zap, Menu, X, Terminal, Film } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,7 +13,8 @@ const MENU_ITEMS = [
   { id: 'workflow', label: 'Workflow Pro', icon: Video },
   { id: 'voice', label: 'Master Voz', icon: Mic },
   { id: 'aesthetics', label: 'Avatar & Look', icon: User },
-  { id: 'local', label: 'Local Ops (RTX)', icon: Terminal },
+  { id: 'local', label: 'Local Ops (Img)', icon: Terminal },
+  { id: 'video_studio', label: 'Video Studio (New)', icon: Film },
   { id: 'budget', label: 'Modo Gratuito', icon: Layers },
 ];
 
