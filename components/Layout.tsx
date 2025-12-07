@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Mic, User, Video, Zap, Menu, X, Terminal, Film } from 'lucide-react';
+import { Layers, Mic, User, Video, Zap, Menu, X, Terminal, Film, Smile } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,13 +9,12 @@ interface LayoutProps {
 
 const MENU_ITEMS = [
   { id: 'intro', label: 'Dashboard', icon: Layers },
+  { id: 'live_avatar', label: 'Live Avatar (React)', icon: Smile }, // NEW
   { id: 'tools', label: 'Top 5 Tools', icon: Zap },
   { id: 'workflow', label: 'Workflow Pro', icon: Video },
+  { id: 'video_studio', label: 'Video Asset Factory', icon: Film },
   { id: 'voice', label: 'Master Voz', icon: Mic },
-  { id: 'aesthetics', label: 'Avatar & Look', icon: User },
   { id: 'local', label: 'Local Ops (Img)', icon: Terminal },
-  { id: 'video_studio', label: 'Video Studio (New)', icon: Film },
-  { id: 'budget', label: 'Modo Gratuito', icon: Layers },
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) => {
@@ -69,7 +68,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
         <div className="absolute bottom-0 w-full p-6 border-t border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-xs text-gray-500">System Online • v2025.12</span>
+            <span className="text-xs text-gray-500">System Online • v15.0</span>
           </div>
         </div>
       </aside>

@@ -7,6 +7,7 @@ import { AestheticsView } from './views/AestheticsView';
 import { FreeModeView } from './views/FreeModeView';
 import { LocalDevView } from './views/LocalDevView';
 import { VideoStudioView } from './views/VideoStudioView';
+import { LiveAvatarView } from './views/LiveAvatarView'; // New Import
 import { Sparkles } from 'lucide-react';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
       case 'budget': return <FreeModeView />;
       case 'local': return <LocalDevView />;
       case 'video_studio': return <VideoStudioView />;
+      case 'live_avatar': return <LiveAvatarView />; // New Route
       default: return <Dashboard setActiveTab={setActiveTab} />;
     }
   };
@@ -58,10 +60,10 @@ const Dashboard = ({ setActiveTab }: { setActiveTab: (t: string) => void }) => (
         Começar Workflow
       </button>
       <button 
-        onClick={() => setActiveTab('tools')}
+        onClick={() => setActiveTab('live_avatar')}
         className="bg-transparent border border-white/20 text-white font-bold py-4 px-8 rounded-xl hover:bg-white/5 transition-transform hover:scale-105"
       >
-        Ver Ferramentas
+        Ver Live Engine
       </button>
     </div>
   </div>
